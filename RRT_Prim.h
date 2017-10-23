@@ -7,6 +7,7 @@
 #include <time.h>
 #include <algorithm>
 #include <stdio.h>
+#include <string.h>
 
 #define PI 3.1415f
 
@@ -60,3 +61,5 @@ void prune_new_obs_collisions(node**, node**, float);
 bool out_of_world(node*);
 bool inside_object(node*);
 bool intersects_new_found_obs(node*, node*);
+node* initialize_world(const int nw, const float p_init[3], const float hdg_init);
+void cleanup_tree_and_world(node** root);

@@ -346,8 +346,6 @@ node* steer_agile(node* from, const agile_man_t agile_man)
 // Update tree in accordance with aircraft's real-time motion
 bool update_tree(node** root, node* goal)
 {
-	bool done = false; // True if aircraft reached the end of the trajectory
-
 	// Get node nearest goal
 	int n;
 	if (!path_found) n = 0;
@@ -366,7 +364,7 @@ bool update_tree(node** root, node* goal)
 		float D2G = sqrtf(powf(w.goals[w.n_goals - 1][0] - comm_end->coord[0], 2) + powf(w.goals[w.n_goals - 1][1] - comm_end->coord[1], 2) + powf(w.goals[w.n_goals - 1][2] - comm_end->coord[2], 2));
 		if (D2G <= w.goals[w.n_goals - 1][4]){
 			printf("Goal node reached :)\n");
-			return done = true;
+			return true;
 		}
 
 		// If the current optimal node is reached, continue along children
@@ -385,7 +383,7 @@ bool update_tree(node** root, node* goal)
 				add_to_commit(C2H_root->child);
 				free_tree(&C2H_root);
 
-				return done = true;
+				return true;
 			}
 		}
 		else{
@@ -405,7 +403,7 @@ bool update_tree(node** root, node* goal)
 	*root = comm_end;
 	(*root)->parent = NULL;
 
-	return done;
+	return false;
 }
 
 // Displacement information for trajectory (length and cost)
@@ -997,4 +995,49 @@ void prune_new_obs_collisions(node** n, node** root, float d)
 		prune_new_obs_collisions(&((*n)->child), root, d);
 	}
 	prune_new_obs_collisions(&((*n)->next), root, d);
+}
+
+node* initialize_world(const int nw, const float p_init[3], const float hdg_init)
+{
+	// Create world
+	create_world(nw);
+	start_coord[0] = w.start->coord[0]; start_coord[1] = w.start->coord[1]; start_coord[2] = w.start->coord[2];
+
+	// Get world offset
+	w.offset[0] = p_init[0] - start_coord[0];
+	w.offset[1] = p_init[1] - start_coord[1];
+	w.offset[2] = p_init[2] - start_coord[2];
+	w.offset[3] = hdg_init - w.start->hdg;
+	w.DCM = create_DCM(0.0f, 0.0f, w.offset[3]);
+
+	// Initialize tree with two nodes
+	node* root = w.start;
+	node* second = steer_agile(root, H2C); // start with H2C
+	//node* second = new_node(0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 1.0f, 0.0f, NULL);
+	//trim_end_states(second, root, 0, 0, 0.5f);
+	add_child(root, second);
+
+	add_to_commit(root);
+	add_to_commit(second);
+
+	return root;
+}
+
+void cleanup_tree_and_world(node** root)
+{
+	// Free tree
+	free_tree(root);
+
+	// Free world
+	for (int i = 0; i < w.n_obs; i++){
+		free(w.obs[i]);
+	}
+
+	free(w.obs);
+	for (int i = 0; i < w.n_goals; i++){
+		free(w.goals[i]);
+	}
+
+	free(w.goals);
+	free(w.DCM);
 }
