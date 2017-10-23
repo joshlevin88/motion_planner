@@ -1,4 +1,5 @@
-#pragma once 
+#ifndef TYPES_H
+#define TYPES_H
 
 // Tree
 struct node{
@@ -42,3 +43,5 @@ struct world{
 };
 
 enum agile_man_t { ATA, C2H, H2C };
+
+#endif

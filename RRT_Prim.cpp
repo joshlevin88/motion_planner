@@ -4,7 +4,8 @@ std::queue<std::vector<float> > new_obs; // Unknown obstacles found via laser ra
 std::vector<std::vector<float> > found_obs; // Unknown obstacles found via laser range finder 
 
 // Allocate dynamic memory and initialize new node
-node* new_node(float coord_x, float coord_y, float coord_z, float hdg, int tr_deg, int zr, int type, float t, float cost, node* parent)
+node* new_node(const float coord_x, const float coord_y, const float coord_z, const float hdg, const int tr_deg, const int zr, 
+	const int type, const float t, const float cost, node* const parent)
 {
 	node* new_node = (node*)malloc(sizeof(node));
 
@@ -27,7 +28,7 @@ node* new_node(float coord_x, float coord_y, float coord_z, float hdg, int tr_de
 }
 
 // Generate random node (revisit because this will create garbage)
-void rand_node_coord(node* rand_node, node* goal_node, int iter)
+void rand_node_coord(node* rand_node, const node* const goal_node, const int iter)
 {
 	// Every bias_freq iterations, return goal node
 	if (iter % bias_freq == 0) {
@@ -67,7 +68,7 @@ node* add_sibling(node* existing_child, node* new_sibling)
 }
 
 // Calculate trim states (coordinates and heading) at end of primitive
-void trim_end_states(node* current, node* from, int tr_deg, int zr, float dt)
+void trim_end_states(node* current, const node* const from, const int tr_deg, const int zr, const float dt)
 {
 	float tr_rad = -tr_deg*PI / 180.0f;
 
@@ -90,7 +91,7 @@ void trim_end_states(node* current, node* from, int tr_deg, int zr, float dt)
 }
 
 // Extend tree
-node* extend_tree(node* root, node* rand_node, node* goal, int gn)
+node* extend_tree(node* root, node* const rand_node, node* const goal, const int gn)
 {
 	std::vector<list> near_vec;
 	node* prim_root = NULL;
@@ -162,7 +163,7 @@ node* extend_tree(node* root, node* rand_node, node* goal, int gn)
 }
 
 // Generate maneuver primitive steering towards node
-node* steer_an(node* from, node* towards)
+node* steer_an(node* const from, node* const towards)
 {
 	int tr_deg, zr;
 	float L;
@@ -225,68 +226,8 @@ node* steer_an(node* from, node* towards)
 }
 
 // Generate agile maneuver primitive 
-node* steer_agile(node* from, const agile_man_t agile_man)
+node* steer_agile(node* const from, const agile_man_t agile_man)
 {
-	/*
-	// Optimized ATA and C2H maneuver trajectories
-	float dx_man[14], dy_man[14], dz_man[14], t_man[14];
-
-	float dx_ATA[14] = { 1.3831f, 2.4070f, 3.2652f, 4.1171f, 4.7425f, 4.9805f, 5.0326f, 4.8323f, 4.2057f, 3.4872f, 2.6745f, 1.5137f, 0.4182f, 0.0f };
-	float dy_ATA[14] = { 0.0041f, 0.0370f, 0.1092f, 0.2218f, 0.3066f, 0.3109f, 0.2524f, 0.1077f, -0.0235f, -0.0477f, -0.0339f, -0.0077f, -0.0002f, 0.0f };
-	float dz_ATA[14] = { 0.0012f, 0.0373f, 0.1580f, 0.4257f, 0.7802f, 1.0111f, 1.1569f, 1.1725f, 0.8915f, 0.5674f, 0.2876f, 0.0526f, -0.0014f, 0.0f };
-	float t_ATA[14] = { 0.1971f, 0.3439f, 0.4784f, 0.6487f, 0.8458f, 0.9926f, 1.1271f, 1.2974f, 1.4945f, 1.6413f, 1.7758f, 1.9461f, 2.1024f, 2.1623f };
-
-	float dx_C2H[14] = { 0.2538f, 1.1928f, 2.2255f, 2.8981f, 3.4204f, 3.9541f, 4.4108f, 4.6521f, 4.8088f, 4.9322f, 4.9922f, 5.0000f, 4.9961f, 4.9930f };
-	float dy_C2H[14] = { 0.0f };
-	float dz_C2H[14] = { -0.0002f, 0.0007f, 0.0677f, 0.1874f, 0.3305f, 0.5262f, 0.7360f, 0.8648f, 0.9564f, 1.0360f, 1.0851f, 1.1011f, 1.1070f, 1.1084f };
-	float t_C2H[14] = { 0.0362f, 0.1707f, 0.3263f, 0.4422f, 0.5483f, 0.6828f, 0.8384f, 0.9543f, 1.0604f, 1.1949f, 1.3505f, 1.4664f, 1.5725f, 1.7070f };
-
-	float dx_H2C[14] = { 0.0000f, 0.0000f, 0.0001f, 0.0000f, 0.0100f, 0.0745f, 0.2653f, 0.4949f, 0.7648f, 1.1751f, 1.7188f, 2.1514f, 2.5566f, 3.0763f };
-	float dy_H2C[14] = { 0.0f };
-	float dz_H2C[14] = { 0.0000f, -0.0030f, -0.0195f, -0.0447f, -0.0774f, -0.1237f, -0.1506f, -0.1367f, -0.1022f, -0.0446f, 0.0148f, 0.0402f, 0.0477f, 0.0477f };
-	float t_H2C[14] = {0.0281f, 0.1325f, 0.2532f, 0.3431f, 0.4255f, 0.5298f, 0.6506f, 0.7405f, 0.8229f, 0.9272f, 1.0479f, 1.1379f, 1.2202f, 1.3246f};
-
-	// If ATA
-	if (m_type == 2){
-	for (int i = 0; i < 14; i++){
-	dx_man[i] = dx_ATA[i];
-	dy_man[i] = dy_ATA[i];
-	dz_man[i] = dz_ATA[i];
-	t_man[i] = t_ATA[i];
-	}
-	}
-
-	// If C2H
-	else if (m_type == 3){
-	for (int i = 0; i < 14; i++){
-	dx_man[i] = dx_C2H[i];
-	dy_man[i] = dy_C2H[i];
-	dz_man[i] = dz_C2H[i];
-	t_man[i] = t_C2H[i];
-	}
-	}
-
-	// If H2C
-	else if (m_type == 4){
-	for (int i = 0; i < 14; i++){
-	dx_man[i] = dx_H2C[i];
-	dy_man[i] = dy_H2C[i];
-	dz_man[i] = dz_H2C[i];
-	t_man[i] = t_H2C[i];
-	}
-	}
-
-	// Rotate to align with heading at from node
-	ptr_to_DCM DCM = create_DCM(0.0f, 0.0f, -from->hdg);
-	for (int i = 0; i < 14; i++){
-	float temp[3] = { dx_man[i], dy_man[i], dz_man[i] };
-	rotate_arrvec(DCM, temp);
-	dx_man[i] = temp[0];
-	dy_man[i] = temp[1];
-	dz_man[i] = temp[2];
-	}
-	*/
-
 	float dx_end, dy_end, dz_end, t_end;
 	int m_type;
 
@@ -344,7 +285,7 @@ node* steer_agile(node* from, const agile_man_t agile_man)
 }
 
 // Update tree in accordance with aircraft's real-time motion
-bool update_tree(node** root, node* goal)
+bool update_tree(node** root, node* const goal)
 {
 	// Get node nearest goal
 	int n;
@@ -407,7 +348,7 @@ bool update_tree(node** root, node* goal)
 }
 
 // Displacement information for trajectory (length and cost)
-disp disp_info(node* from, node* to)
+disp disp_info(node* const from, node* const to)
 {
 	float L;
 
@@ -429,7 +370,7 @@ disp disp_info(node* from, node* to)
 }
 
 // Check for collision
-bool collision(node* root)
+bool collision(node* const root)
 {
 	node* from = root;
 	node* to = NULL;
@@ -484,7 +425,7 @@ bool collision(node* root)
 	return false;
 }
 
-bool out_of_world(node* n)
+bool out_of_world(node* const n)
 {
 	if (n->coord[0] < bf || n->coord[0] > (w.lims[0] - bf) ||
 		n->coord[1] < bf || n->coord[1] > (w.lims[1] - bf) ||
@@ -495,7 +436,7 @@ bool out_of_world(node* n)
 	return false;
 }
 
-bool inside_object(node* n)
+bool inside_object(node* const n)
 {
 	for (int i = 0; i < w.n_obs; i++){
 		if (n->coord[0] >= (w.obs[i][0] - bf) &&
@@ -511,7 +452,7 @@ bool inside_object(node* n)
 	return false;
 }
 
-bool intersects_new_found_obs(node* from, node* to)
+bool intersects_new_found_obs(node* const from, node* const to)
 {
 	if (found_obs.empty()){
 		return false;
@@ -541,7 +482,7 @@ void free_tree(node** n)
 }
 
 // Prune tree (free memory of nodes that aren't in new_root's tree)
-void prune_tree(node** root, node* new_root)
+void prune_tree(node** root, node* const new_root)
 {
 	bool tbd = true;
 
@@ -564,7 +505,7 @@ void prune_tree(node** root, node* new_root)
 }
 
 // Create list of nodes in order of some nearness criteria
-std::vector<list> near(node* root, node* to, int near_type)
+std::vector<list> near(node* const root, node* const to, const int near_type)
 {
 	std::vector<list> near_vec; // Vector of nodes with nearness information
 	add_to_near_vec(root, to, &near_vec); // Add all nodes in tree, with nearness information, to vector
@@ -594,7 +535,7 @@ bool comp_snear(const list &a, const list &b)
 }
 
 // Get size of tree
-int tree_size(node* root)
+int tree_size(node* const root)
 {
 	if (root == NULL)
 		return 0;
@@ -604,7 +545,7 @@ int tree_size(node* root)
 }
 
 // Add nodes in tree, with nearness information, to vector
-void add_to_near_vec(node* n, node* to, std::vector<list>* near_vec)
+void add_to_near_vec(node* const n, node* const to, std::vector<list>* near_vec)
 {
 	if (n == NULL) return;
 
@@ -637,7 +578,7 @@ void add_to_near_vec(node* n, node* to, std::vector<list>* near_vec)
 }
 
 // Create stack of nodes starting right after root and going to end
-std::stack<node*> root_to_end(node* root, node* end)
+std::stack<node*> root_to_end(node* const root, node* const end)
 {
 	node* temp = end;
 	std::stack<node*> r2e_dq;
@@ -651,17 +592,17 @@ std::stack<node*> root_to_end(node* root, node* end)
 }
 
 // Add node to vector of committed nodes
-void add_to_commit(node* n)
+void add_to_commit(const node* const n)
 {
 	static int num = 0;
 
 	float rel_pos[3] = { n->coord[0] - start_coord[0],
-		n->coord[1] - start_coord[1],
-		n->coord[2] - start_coord[2] };
+						 n->coord[1] - start_coord[1],
+						 n->coord[2] - start_coord[2] };
 	rotate_arrvec(w.DCM, rel_pos);
 	float pos[3] = { rel_pos[0] + w.offset[0] + start_coord[0],
-		rel_pos[1] + w.offset[1] + start_coord[1],
-		rel_pos[2] + w.offset[2] + start_coord[2] };
+				   	 rel_pos[1] + w.offset[1] + start_coord[1],
+					 rel_pos[2] + w.offset[2] + start_coord[2] };
 	float hdg = n->hdg + w.offset[3];
 	limit_angle(hdg);
 
@@ -669,7 +610,7 @@ void add_to_commit(node* n)
 }
 
 // Create Direction Cosine Matrix
-ptr_to_DCM create_DCM(float phi, float the, float psi)
+ptr_to_DCM create_DCM(const float phi, const float the, const float psi)
 {
 	ptr_to_DCM DCM = (ptr_to_DCM)malloc(sizeof(*DCM));
 
@@ -689,7 +630,7 @@ ptr_to_DCM create_DCM(float phi, float the, float psi)
 }
 
 // Calculate L2-norm between two nodes
-float norm(node* n1, node* n2)
+float norm(node* const n1, node* const n2)
 {
 	return sqrtf(powf(n2->coord[0] - n1->coord[0], 2) + powf(n2->coord[1] - n1->coord[1], 2) + powf(n2->coord[2] - n1->coord[2], 2));
 }
@@ -882,7 +823,7 @@ void create_world(const int n)
 }
 
 // Check if goal region has been reached
-bool goal_reached(node* n, node* goal, int gn)
+bool goal_reached(node* const n, node* const goal, const int gn)
 {
 	if (n == NULL) return false;
 	if (norm(n, goal) <= w.goals[gn][4]) { // If in region
@@ -893,7 +834,7 @@ bool goal_reached(node* n, node* goal, int gn)
 	return goal_reached(n->child, goal, gn);
 }
 
-void rotate_arrvec(ptr_to_DCM DCM, float arr_vec[3])
+void rotate_arrvec(ptr_to_DCM DCM, float arr_vec[])
 {
 	float tmp[3] = { arr_vec[0], arr_vec[1], arr_vec[2] };
 
@@ -910,7 +851,7 @@ void limit_angle(float &angle)
 }
 
 // Get heading from euler array when aircraft is in hover
-float hover_hdg(const float& phi, const float& the, const float& psi)
+float hover_hdg(const float phi, const float the, const float psi)
 {
 	// Create DCM prime
 	ptr_to_DCM DCM_p = (ptr_to_DCM)malloc(sizeof(*DCM_p));
@@ -975,7 +916,7 @@ void update_tree_for_new_obstacles(node** root)
 	}
 }
 
-void prune_new_obs_collisions(node** n, node** root, float d)
+void prune_new_obs_collisions(node** n, node** root, const float d)
 {
 	if (*n == NULL){
 		return;
