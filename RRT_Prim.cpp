@@ -287,10 +287,12 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 // Update tree in accordance with aircraft's real-time motion
 bool update_tree(node** root, node* const goal)
 {
+	update_tree_for_new_obstacles(root);
+
 	// Get node nearest goal
 	int n;
 	if (!path_found) n = 0;
-	else n = 1;
+	else n = 0;
 	std::vector<list> nearest_vec = near(*root, goal, n);
 	node* end = nearest_vec[0].n;
 
@@ -425,6 +427,7 @@ bool collision(node* const root)
 	return false;
 }
 
+// Check if node is outside of world
 bool out_of_world(node* const n)
 {
 	if (n->coord[0] < bf || n->coord[0] > (w.lims[0] - bf) ||
@@ -436,6 +439,7 @@ bool out_of_world(node* const n)
 	return false;
 }
 
+// Check if node is inside any of world's known objects
 bool inside_object(node* const n)
 {
 	for (int i = 0; i < w.n_obs; i++){
@@ -452,6 +456,7 @@ bool inside_object(node* const n)
 	return false;
 }
 
+// Check if path between from and to nodes collides with new objects detected
 bool intersects_new_found_obs(node* const from, node* const to)
 {
 	if (found_obs.empty()){
@@ -561,9 +566,16 @@ void add_to_near_vec(node* const n, node* const to, std::vector<list>* near_vec)
 	// Node address and nearness info
 	list l;
 	l.n = n;
-	l.proximity = D2G;
-	l.nearness = disp_info(td, to).length;
-	l.smart_nearness = (L + D2G) / D;
+	if (n->type == 3) { // C2H means node is in goal region
+		l.proximity = 0.0f;
+		l.nearness = 0.0f;
+		l.smart_nearness = 0.0f;
+	} 
+	else {
+		l.proximity = D2G;
+		l.nearness = disp_info(td, to).length;
+		l.smart_nearness = (L + D2G) / D;
+	}
 
 	(*near_vec).push_back(l); // Add to vector
 
@@ -781,7 +793,7 @@ void create_world(const int n)
 	}
 
 	// S walls
-	else {
+	else if (n == 3) {
 
 		w.start = new_node(3.0f, 3.0f, 5.0f, PI / 4, 0, 0, 0, 0.0f, 0.0f, NULL);
 
@@ -820,6 +832,32 @@ void create_world(const int n)
 			}
 		}
 	}
+
+	// No obstacles
+	else {
+
+		w.start = new_node(3.0f, 3.0f, 5.0f, PI / 4, 0, 0, 0, 0.0f, 0.0f, NULL);
+
+		w.lims[0] = 50.0f;
+		w.lims[1] = 25.0f;
+		w.lims[2] = 10.0f;
+
+		w.n_obs = 0;
+
+		w.n_goals = 1;
+		float goal_arr[1][5] = { 48.0f, 23.0f, 5.0f, PI / 2.0f, 2.5f };
+
+		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
+		for (int i = 0; i < w.n_goals; i++){
+			w.goals[i] = (float*)malloc(5 * sizeof(float*));
+		}
+
+		for (int i = 0; i < w.n_goals; i++){
+			for (int j = 0; j < 5; j++){
+				w.goals[i][j] = goal_arr[i][j];
+			}
+		}
+	}
 }
 
 // Check if goal region has been reached
@@ -834,6 +872,7 @@ bool goal_reached(node* const n, node* const goal, const int gn)
 	return goal_reached(n->child, goal, gn);
 }
 
+// Rotate array by DCM
 void rotate_arrvec(ptr_to_DCM DCM, float arr_vec[])
 {
 	float tmp[3] = { arr_vec[0], arr_vec[1], arr_vec[2] };
@@ -843,6 +882,7 @@ void rotate_arrvec(ptr_to_DCM DCM, float arr_vec[])
 	arr_vec[2] = (*DCM)[2][0] * tmp[0] + (*DCM)[2][1] * tmp[1] + (*DCM)[2][2] * tmp[2];
 }
 
+// Limit angle to -PI to PI range
 void limit_angle(float &angle)
 {
 	angle = fmod(angle, 2 * PI);
@@ -879,20 +919,31 @@ float hover_hdg(const float phi, const float the, const float psi)
 	return hdg;
 }
 
+// Check if there is an intersection between two lines (p0--p1, p2--p3)
 bool intersection(const float p0_x, const float p0_y, const float p1_x, const float p1_y,
 	const float p2_x, const float p2_y, const float p3_x, const float p3_y)
 {
+	float d = norm(p2_x, p2_y, p3_x, p3_y);
+
+	// Add buffer
+	float p2_x_bf = p3_x + (p2_x - p3_x) + bf * (p2_x - p3_x) / d;
+	float p2_y_bf = p3_y + (p2_y - p3_y) + bf * (p2_y - p3_y) / d;
+	float p3_x_bf = p2_x + (p3_x - p2_x) + bf * (p3_x - p2_x) / d;
+	float p3_y_bf = p2_y + (p3_y - p2_y) + bf * (p3_y - p2_y) / d;
+
 	float s1_x, s1_y, s2_x, s2_y;
-	s1_x = p1_x - p0_x;     s1_y = p1_y - p0_y;
-	s2_x = p3_x - p2_x;     s2_y = p3_y - p2_y;
+	s1_x = p1_x - p0_x;     
+	s1_y = p1_y - p0_y;
+	s2_x = p3_x_bf - p2_x_bf;     
+	s2_y = p3_y_bf - p2_y_bf;
 
 	float den = (-s2_x * s1_y + s1_x * s2_y);
 
 	if (fabsf(den) < 0.0001f) return false;
 
 	float s, t;
-	s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) / den;
-	t = (s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) / den;
+	s = (-s1_y * (p0_x - p2_x_bf) + s1_x * (p0_y - p2_y_bf)) / den;
+	t = (s2_x * (p0_y - p2_y_bf) - s2_y * (p0_x - p2_x_bf)) / den;
 
 	if (s >= 0 && s <= 1 && t >= 0 && t <= 1){
 		return true; // Collision
@@ -901,11 +952,12 @@ bool intersection(const float p0_x, const float p0_y, const float p1_x, const fl
 	return false; // No collision
 }
 
+// Update tree to take into account all new obstacles detected in real-time
 void update_tree_for_new_obstacles(node** root)
 {
 	while (!new_obs.empty()){
-		float d = norm((*root)->coord[0], (*root)->coord[1], new_obs.front()[0], new_obs.front()[1]);
-		float d2 = norm((*root)->coord[0], (*root)->coord[1], new_obs.front()[2], new_obs.front()[3]);
+		float d = norm((*root)->coord[0], (*root)->coord[1], new_obs.front()[0], new_obs.front()[1]) + 3.0f;
+		float d2 = norm((*root)->coord[0], (*root)->coord[1], new_obs.front()[2], new_obs.front()[3]) + 3.0f;
 		if (d2 > d) {
 			d = d2;
 		}
@@ -916,19 +968,22 @@ void update_tree_for_new_obstacles(node** root)
 	}
 }
 
+// Delete tree nodes that collide with new obstacles
 void prune_new_obs_collisions(node** n, node** root, const float d)
 {
 	if (*n == NULL){
 		return;
 	}
 
+	// Do not keep searching node and children if it is further from root than furthest obstacle corner
 	float dn = norm((*root)->coord[0], (*root)->coord[1], (*n)->coord[0], (*n)->coord[1]);
-	bool past_obs = (dn > d) ? true : false;
+	bool past_obs = (dn > d) ? true : false; 
 
 	if (!past_obs && (*n)->child != NULL){
 		if (intersection((*n)->coord[0], (*n)->coord[1], (*n)->child->coord[0], (*n)->child->coord[1],
 			new_obs.front()[0], new_obs.front()[1], new_obs.front()[2], new_obs.front()[3])) {
 			free_tree(n);
+			return;
 		}
 	}
 
@@ -938,6 +993,7 @@ void prune_new_obs_collisions(node** n, node** root, const float d)
 	prune_new_obs_collisions(&((*n)->next), root, d);
 }
 
+// Create world and initialize tree
 node* initialize_world(const int nw, const float p_init[3], const float hdg_init)
 {
 	// Create world
@@ -964,6 +1020,7 @@ node* initialize_world(const int nw, const float p_init[3], const float hdg_init
 	return root;
 }
 
+// Garbage cleanup for tree and world dynamic memory
 void cleanup_tree_and_world(node** root)
 {
 	// Free tree
