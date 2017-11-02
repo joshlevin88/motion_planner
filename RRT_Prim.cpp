@@ -70,7 +70,7 @@ node* add_sibling(node* existing_child, node* new_sibling)
 // Calculate trim states (coordinates and heading) at end of primitive
 void trim_end_states(node* current, const node* const from, const int tr_deg, const int zr, const float dt)
 {
-	float tr_rad = -tr_deg*PI / 180.0f;
+	float tr_rad = tr_deg*PI / 180.0f;
 
 	// If straight 
 	if (tr_deg == 0){
@@ -80,13 +80,13 @@ void trim_end_states(node* current, const node* const from, const int tr_deg, co
 	}
 	// If turning
 	else{
-		current->coord[0] = from->coord[0] + (-V / tr_rad*sinf(from->hdg - tr_rad*dt) + V / tr_rad*sinf(from->hdg))*cosf(asinf(zr / V));
-		current->coord[1] = from->coord[1] + (V / tr_rad*cosf(from->hdg - tr_rad*dt) - V / tr_rad*cosf(from->hdg))*cosf(asinf(zr / V));
+		current->coord[0] = from->coord[0] + (V / tr_rad*sinf(from->hdg + tr_rad*dt) - V / tr_rad*sinf(from->hdg))*cosf(asinf(zr / V));
+		current->coord[1] = from->coord[1] + (V / -tr_rad*cosf(from->hdg + tr_rad*dt) + V / tr_rad*cosf(from->hdg))*cosf(asinf(zr / V));
 		current->coord[2] = from->coord[2] + zr*dt;
 	}
 
 	// Calculate heading and keep between -PI and PI
-	current->hdg = from->hdg - tr_rad*dt;
+	current->hdg = from->hdg + tr_rad*dt;
 	limit_angle(current->hdg);
 }
 
@@ -228,8 +228,8 @@ node* steer_an(node* const from, node* const towards)
 // Generate agile maneuver primitive 
 node* steer_agile(node* const from, const agile_man_t agile_man)
 {
-	float dx_end, dy_end, dz_end, t_end;
-	int m_type;
+	float dx_end{0}, dy_end{0}, dz_end{0}, t_end{0};
+	int m_type = 0;
 
 	switch (agile_man) {
 	case ATA:
@@ -606,6 +606,7 @@ std::stack<node*> root_to_end(node* const root, node* const end)
 // Add node to vector of committed nodes
 void add_to_commit(const node* const n)
 {
+	/*
 	static int num = 0;
 
 	float rel_pos[3] = { n->coord[0] - start_coord[0],
@@ -619,6 +620,7 @@ void add_to_commit(const node* const n)
 	limit_angle(hdg);
 
 	++num;
+	*/
 }
 
 // Create Direction Cosine Matrix
