@@ -70,7 +70,7 @@ node* add_sibling(node* existing_child, node* new_sibling)
 // Calculate trim states (coordinates and heading) at end of primitive
 void trim_end_states(node* current, const node* const from, const int tr_deg, const int zr, const float dt)
 {
-	float tr_rad = tr_deg*PI / 180.0f;
+	float tr_rad = -tr_deg*PI / 180.0f;
 
 	// If straight 
 	if (tr_deg == 0){
@@ -80,13 +80,13 @@ void trim_end_states(node* current, const node* const from, const int tr_deg, co
 	}
 	// If turning
 	else{
-		current->coord[0] = from->coord[0] + (V / tr_rad*sinf(from->hdg + tr_rad*dt) - V / tr_rad*sinf(from->hdg))*cosf(asinf(zr / V));
-		current->coord[1] = from->coord[1] + (V / -tr_rad*cosf(from->hdg + tr_rad*dt) + V / tr_rad*cosf(from->hdg))*cosf(asinf(zr / V));
+		current->coord[0] = from->coord[0] + (-V / tr_rad*sinf(from->hdg - tr_rad*dt) + V / tr_rad*sinf(from->hdg))*cosf(asinf(zr / V));
+		current->coord[1] = from->coord[1] + (V / tr_rad*cosf(from->hdg - tr_rad*dt) - V / tr_rad*cosf(from->hdg))*cosf(asinf(zr / V));
 		current->coord[2] = from->coord[2] + zr*dt;
 	}
 
 	// Calculate heading and keep between -PI and PI
-	current->hdg = from->hdg + tr_rad*dt;
+	current->hdg = from->hdg - tr_rad*dt;
 	limit_angle(current->hdg);
 }
 
@@ -228,8 +228,8 @@ node* steer_an(node* const from, node* const towards)
 // Generate agile maneuver primitive 
 node* steer_agile(node* const from, const agile_man_t agile_man)
 {
-	float dx_end{0}, dy_end{0}, dz_end{0}, t_end{0};
-	int m_type = 0;
+	float dx_end, dy_end, dz_end, t_end;
+	int m_type;
 
 	switch (agile_man) {
 	case ATA:
@@ -285,7 +285,7 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 }
 
 // Update tree in accordance with aircraft's real-time motion
-bool update_tree(node** root, node* const goal)
+bool update_tree(node** root, node* const goal, Autopilot_Interface &api, mavlink_mp_traj_t &mpn)
 {
 	update_tree_for_new_obstacles(root);
 
@@ -322,8 +322,8 @@ bool update_tree(node** root, node* const goal)
 
 				// End with C2H
 				node* C2H_root = steer_agile(comm_end, C2H);
-				add_to_commit(C2H_root);
-				add_to_commit(C2H_root->child);
+				add_to_commit(C2H_root, api, mpn);
+				add_to_commit(C2H_root->child, api, mpn);
 				free_tree(&C2H_root);
 
 				return true;
@@ -334,7 +334,7 @@ bool update_tree(node** root, node* const goal)
 			r2e_list.pop();
 		}
 
-		add_to_commit(comm_end);
+		add_to_commit(comm_end, api, mpn);
 
 		if (comm_end->type == 2) printf("ATA at [%.1f, %.1f, %.1f]\n", (double)comm_end->coord[0], (double)comm_end->coord[1], (double)comm_end->coord[2]);
 		else if (comm_end->type == 3) printf("C2H at [%.1f, %.1f, %.1f]\n", (double)comm_end->coord[0], (double)comm_end->coord[1], (double)comm_end->coord[2]);
@@ -604,9 +604,8 @@ std::stack<node*> root_to_end(node* const root, node* const end)
 }
 
 // Add node to vector of committed nodes
-void add_to_commit(const node* const n)
+void add_to_commit(const node* const n, Autopilot_Interface &api, mavlink_mp_traj_t &mpn)
 {
-	/*
 	static int num = 0;
 
 	float rel_pos[3] = { n->coord[0] - start_coord[0],
@@ -620,7 +619,11 @@ void add_to_commit(const node* const n)
 	limit_angle(hdg);
 
 	++num;
-	*/
+
+	set_mp_traj(pos[0], pos[1], pos[2], hdg, n->t, n->tr_deg, n->zr, n->type, mpn);
+	api.update_mp_traj(mpn);
+	
+	//printf("Node number: %i, Node time: %.4f, Node type: %i\n", num, n->t, n->type);
 }
 
 // Create Direction Cosine Matrix
@@ -996,7 +999,7 @@ void prune_new_obs_collisions(node** n, node** root, const float d)
 }
 
 // Create world and initialize tree
-node* initialize_world(const int nw, const float p_init[3], const float hdg_init)
+node* initialize_world(const int nw, const float p_init[3], const float hdg_init, Autopilot_Interface &api, mavlink_mp_traj_t &mpn)
 {
 	// Create world
 	create_world(nw);
@@ -1016,8 +1019,8 @@ node* initialize_world(const int nw, const float p_init[3], const float hdg_init
 	//trim_end_states(second, root, 0, 0, 0.5f);
 	add_child(root, second);
 
-	add_to_commit(root);
-	add_to_commit(second);
+	add_to_commit(root, api, mpn);
+	add_to_commit(second, api, mpn);
 
 	return root;
 }
@@ -1040,4 +1043,11 @@ void cleanup_tree_and_world(node** root)
 
 	free(w.goals);
 	free(w.DCM);
+}
+
+void quat2eul(const float q[4], float eul[3])
+{
+	eul[0] = atan2f(2*(q[0]*q[1] + q[2]*q[3]), 1 - 2*(q[1]*q[1] + q[2]*q[2]));
+	eul[1] = asinf(2*(q[0]*q[2] - q[3]*q[1]));
+	eul[2] = atan2f(2*(q[0]*q[3] + q[1]*q[2]), 1 - 2*(q[2]*q[2] + q[3]*q[3]));
 }

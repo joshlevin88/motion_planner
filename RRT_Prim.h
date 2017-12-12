@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "autopilot_interface.h"
+
 #define PI 3.1415f
 
 const float V = 5.0f; // Flight velocity
@@ -34,7 +36,7 @@ void trim_end_states(node*, const node* const, const int, const int, const float
 node* extend_tree(node*, node* const, node* const, const int);
 node* steer_an(node* const, node* const);
 node* steer_agile(node* const, const agile_man_t);
-bool update_tree(node**, node* const);
+bool update_tree(node**, node* const, Autopilot_Interface &, mavlink_mp_traj_t &);
 disp disp_info(node* const, node* const);
 bool collision(node* const);
 bool out_of_world(node* const);
@@ -49,7 +51,7 @@ bool comp_snear(const list &, const list &);
 int tree_size(node* const);
 void add_to_near_vec(node* const, node* const, std::vector<list>*);
 std::stack<node*> root_to_end(node* const, node* const);
-void add_to_commit(const node* const);
+void add_to_commit(const node* const, Autopilot_Interface &, mavlink_mp_traj_t &);
 ptr_to_DCM create_DCM(const float, const float, const float);
 float norm(node* const, node* const);
 float norm(const float, const float, const float, const float);
@@ -62,5 +64,6 @@ float hover_hdg(const float, const float, const float);
 bool intersection(const float, const float, const float, const float, const float, const float, const float, const float);
 void update_tree_for_new_obstacles(node**);
 void prune_new_obs_collisions(node**, node**, const float);
-node* initialize_world(const int nw, const float p_init[3], const float hdg_init);
+node* initialize_world(const int nw, const float p_init[3], const float hdg_init, Autopilot_Interface &, mavlink_mp_traj_t &);
 void cleanup_tree_and_world(node** root);
+void quat2eul(const float q[4], float eul[3]);
