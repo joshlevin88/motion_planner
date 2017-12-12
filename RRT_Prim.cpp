@@ -623,6 +623,25 @@ void add_to_commit(const node* const n)
 	*/
 }
 
+// Add node to vector of committed nodes, converting from world frame to Stinger Dome
+void add_to_commit_2(const node* const n)
+{
+	static int num = 0;
+
+	float pos[3] {n->coord[0], -n->coord[1], n->coord[2]};
+
+	rotate_arrvec(w.DCM, pos);
+
+	float hdg = -w.offset[3] - n->hdg;
+
+	limit_angle(hdg);
+
+	++num;
+
+	printf("Commited pos: [%.1f, %.1f, %.1f], Commited hdg: %.1f\n", 
+		pos[0], pos[1], pos[2], hdg*180.0f/PI);
+}
+
 // Create Direction Cosine Matrix
 ptr_to_DCM create_DCM(const float phi, const float the, const float psi)
 {
@@ -1008,6 +1027,41 @@ node* initialize_world(const int nw, const float p_init[3], const float hdg_init
 	w.offset[2] = p_init[2] - start_coord[2];
 	w.offset[3] = hdg_init - w.start->hdg;
 	w.DCM = create_DCM(0.0f, 0.0f, w.offset[3]);
+
+	// Initialize tree with two nodes
+	node* root = w.start;
+	node* second = steer_agile(root, H2C); // start with H2C
+	//node* second = new_node(0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 1.0f, 0.0f, NULL);
+	//trim_end_states(second, root, 0, 0, 0.5f);
+	add_child(root, second);
+
+	add_to_commit(root);
+	add_to_commit(second);
+
+	return root;
+}
+
+// Create world and initialize tree when in Dome
+node* initialize_world_2(const int nw, const float p_init[3], const float hdg_init)
+{
+	// Create world
+	create_world(nw);
+
+	ptr_to_DCM DCM_init = create_DCM(0.0f, 0.0f, hdg_del_dome);
+	float temp[3] {p_init[0], p_init[1], p_init[2]};
+	rotate_arrvec(DCM_init, temp);
+	free(DCM_init);
+
+	w.start->coord[0] = temp[0]; 
+	w.start->coord[1] = -temp[1]; 
+	w.start->coord[2] = temp[2];
+	w.start->hdg = hdg_del_dome - hdg_init;
+	w.offset[3] = -hdg_del_dome;
+	w.DCM = create_DCM(0.0f, 0.0f, w.offset[3]);
+
+	start_coord[0] = w.start->coord[0];
+	start_coord[1] = w.start->coord[1]; 
+	start_coord[2] = w.start->coord[2];
 
 	// Initialize tree with two nodes
 	node* root = w.start;

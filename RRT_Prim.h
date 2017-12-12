@@ -24,6 +24,7 @@ const float ts = 0.5f; // Maximum time between nodes
 const float ts_max = 1.0f; // Maximum time for a primitive
 const int near_max = 10; // Maximum number of next near attempts
 const int bias_freq = 30; // Frequency of selecting goal as "random" node
+const float hdg_del_dome = 2.32f; // Heading of x-axis of Stinger Dome relative to NED frame
 
 node* new_node(const float, const float, const float, const float, const int, 
 	const int, const int, const float, const float, node* const);
@@ -50,6 +51,7 @@ int tree_size(node* const);
 void add_to_near_vec(node* const, node* const, std::vector<list>*);
 std::stack<node*> root_to_end(node* const, node* const);
 void add_to_commit(const node* const);
+void add_to_commit_2(const node* const);
 ptr_to_DCM create_DCM(const float, const float, const float);
 float norm(node* const, node* const);
 float norm(const float, const float, const float, const float);
@@ -63,4 +65,5 @@ bool intersection(const float, const float, const float, const float, const floa
 void update_tree_for_new_obstacles(node**);
 void prune_new_obs_collisions(node**, node**, const float);
 node* initialize_world(const int nw, const float p_init[3], const float hdg_init);
+node* initialize_world_2(const int nw, const float p_init[3], const float hdg_init);
 void cleanup_tree_and_world(node** root);
