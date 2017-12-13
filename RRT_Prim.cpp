@@ -237,21 +237,21 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 		dx_end = 0.0f;
 		dy_end = 0.0f;
 		dz_end = 0.0f;
-		t_end = 1.7734f;
+		t_end = 1.8004f;
 		break;
 	case C2H:
 		m_type = 3;
-		dx_end = 3.9098f;
+		dx_end = 3.7117f;
 		dy_end = 0.0f;
-		dz_end = 0.4816f;
-		t_end = 1.6667f;
+		dz_end = 0.3989f;
+		t_end = 1.5860f;
 		break;
 	case H2C:
 		m_type = 4;
-		dx_end = 3.0763f;
+		dx_end = 3.2277f;
 		dy_end = 0.0f;
-		dz_end = -0.0477f;
-		t_end = 1.3246f;
+		dz_end = -0.1720f;
+		t_end = 1.3272f;
 		break;
 	default:
 		printf("Unrecognized agile maneuver type.\n");
@@ -352,27 +352,35 @@ bool update_tree(node** root, node* const goal)
 
 	}
 
-	// Prune tree
-	prune_tree(root, comm_end);
-	*root = comm_end;
-	(*root)->parent = NULL;
-
 	// Send commited nodes
+	// Re-planning if position tracking error is large
 	if(large_pos_err){
-		node* last = *root; //should be actual pos
+		// Add commited nodes starting from aircraft's actual position
+		node* last = *root; // Note: should be node with actual position
 		node* next;
 		while(!comm_q.empty()){
 			next = comm_q.front();
 			trim_end_states(next, last, next->tr_deg, next->zr, (next->t - last->t));
 			add_to_commit_2(next);
 			comm_q.pop();
+			last = next;
 		}
+		// Free tree except for root node (node at end of commit)
+		*root = next;
+		(*root)->next = NULL;
+		(*root)->child = NULL;
+		(*root)->parent = NULL;
+		free_tree_2(root, *root);
 	}
 	else {
 		while (!comm_q.empty()){
 			add_to_commit_2(comm_q.front());
 			comm_q.pop();
 		}
+			// Prune tree
+			prune_tree(root, comm_end);
+			*root = comm_end;
+			(*root)->parent = NULL;
 	}
 	
 	return alg_end;
@@ -514,6 +522,21 @@ void free_tree(node** n)
 
 	free(*n);
 	*n = NULL;
+}
+
+// Deallocate memory of tree, except root
+void free_tree_2(node** n, node* const root)
+{
+	if (*n == NULL)
+		return;
+
+	free_tree_2(&((*n)->child), root);
+	free_tree_2(&((*n)->next), root);
+
+	if(*n != root){
+		free(*n);
+		*n = NULL;
+	}
 }
 
 // Prune tree (free memory of nodes that aren't in new_root's tree)
