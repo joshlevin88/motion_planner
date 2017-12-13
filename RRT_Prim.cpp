@@ -287,6 +287,10 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 // Update tree in accordance with aircraft's real-time motion
 bool update_tree(node** root, node* const goal)
 {
+	bool alg_end = false;
+	bool large_pos_err = false;
+	std::queue<node*> comm_q;
+
 	update_tree_for_new_obstacles(root);
 
 	// Get node nearest goal
@@ -307,7 +311,9 @@ bool update_tree(node** root, node* const goal)
 		float D2G = sqrtf(powf(w.goals[w.n_goals - 1][0] - comm_end->coord[0], 2) + powf(w.goals[w.n_goals - 1][1] - comm_end->coord[1], 2) + powf(w.goals[w.n_goals - 1][2] - comm_end->coord[2], 2));
 		if (D2G <= w.goals[w.n_goals - 1][4]){
 			printf("Goal node reached :)\n");
-			return true;
+			alg_end = true;
+			break;
+			//return true;
 		}
 
 		// If the current optimal node is reached, continue along children
@@ -322,11 +328,15 @@ bool update_tree(node** root, node* const goal)
 
 				// End with C2H
 				node* C2H_root = steer_agile(comm_end, C2H);
-				add_to_commit(C2H_root);
-				add_to_commit(C2H_root->child);
+				//add_to_commit_2(C2H_root);
+				comm_q.push(C2H_root);
+				//add_to_commit_2(C2H_root->child);
+				comm_q.push(C2H_root->child);
 				free_tree(&C2H_root);
 
-				return true;
+				alg_end = true;
+				break;
+				//return true;
 			}
 		}
 		else{
@@ -334,7 +344,8 @@ bool update_tree(node** root, node* const goal)
 			r2e_list.pop();
 		}
 
-		add_to_commit(comm_end);
+		//add_to_commit_2(comm_end);
+		comm_q.push(comm_end);
 
 		if (comm_end->type == 2) printf("ATA at [%.1f, %.1f, %.1f]\n", (double)comm_end->coord[0], (double)comm_end->coord[1], (double)comm_end->coord[2]);
 		else if (comm_end->type == 3) printf("C2H at [%.1f, %.1f, %.1f]\n", (double)comm_end->coord[0], (double)comm_end->coord[1], (double)comm_end->coord[2]);
@@ -346,7 +357,26 @@ bool update_tree(node** root, node* const goal)
 	*root = comm_end;
 	(*root)->parent = NULL;
 
-	return false;
+	// Send commited nodes
+	if(large_pos_err){
+		node* last = *root; //should be actual pos
+		node* next;
+		while(!comm_q.empty()){
+			next = comm_q.front();
+			trim_end_states(next, last, next->tr_deg, next->zr, (next->t - last->t));
+			add_to_commit_2(next);
+			comm_q.pop();
+		}
+	}
+	else {
+		while (!comm_q.empty()){
+			add_to_commit_2(comm_q.front());
+			comm_q.pop();
+		}
+	}
+	
+	return alg_end;
+	//return false;
 }
 
 // Displacement information for trajectory (length and cost)
@@ -638,8 +668,8 @@ void add_to_commit_2(const node* const n)
 
 	++num;
 
-	printf("Commited pos: [%.1f, %.1f, %.1f], Commited hdg: %.1f\n", 
-		pos[0], pos[1], pos[2], hdg*180.0f/PI);
+	//printf("Commited pos: [%.1f, %.1f, %.1f], Commited hdg: %.1f\n", 
+		//pos[0], pos[1], pos[2], hdg*180.0f/PI);
 }
 
 // Create Direction Cosine Matrix
@@ -1035,8 +1065,8 @@ node* initialize_world(const int nw, const float p_init[3], const float hdg_init
 	//trim_end_states(second, root, 0, 0, 0.5f);
 	add_child(root, second);
 
-	add_to_commit(root);
-	add_to_commit(second);
+	add_to_commit_2(root);
+	add_to_commit_2(second);
 
 	return root;
 }
@@ -1070,8 +1100,8 @@ node* initialize_world_2(const int nw, const float p_init[3], const float hdg_in
 	//trim_end_states(second, root, 0, 0, 0.5f);
 	add_child(root, second);
 
-	add_to_commit(root);
-	add_to_commit(second);
+	add_to_commit_2(root);
+	add_to_commit_2(second);
 
 	return root;
 }

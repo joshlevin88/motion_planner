@@ -13,7 +13,7 @@
 
 const float V = 5.0f; // Flight velocity
 const float bf = 2.0f; // Buffer around obstacles
-const int max_tr_deg = 80; // Max turning rate
+const int max_tr_deg = 110; // Max turning rate
 const int max_zr = 0; // Max climb rate
 const float coll_dist = 0.2f; // Gap between collision checks
 const float ATA_dist = 5.0f; // Distance required to do ATA
