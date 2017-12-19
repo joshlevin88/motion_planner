@@ -287,8 +287,13 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 // Update tree in accordance with aircraft's real-time motion
 bool update_tree(node** root, node* const goal)
 {
+	static int count = 1;
 	bool alg_end = false;
 	bool large_pos_err = false;
+	if(count % 3 == 0 && count <= 9){
+		printf("large pos error\n");
+		large_pos_err = true;
+	}
 	std::queue<node*> comm_q;
 
 	update_tree_for_new_obstacles(root);
@@ -357,6 +362,9 @@ bool update_tree(node** root, node* const goal)
 	if(large_pos_err){
 		// Add commited nodes starting from aircraft's actual position
 		node* last = *root; // Note: should be node with actual position
+		last->coord[0] += 1;
+		last->coord[1] += 1;
+		last->coord[2] += 0;
 		node* next;
 		while(!comm_q.empty()){
 			next = comm_q.front();
@@ -383,6 +391,7 @@ bool update_tree(node** root, node* const goal)
 			(*root)->parent = NULL;
 	}
 	
+	++count;
 	return alg_end;
 	//return false;
 }
@@ -736,7 +745,7 @@ float norm(const float p1_x, const float p1_y, const float p1_z, const float p2_
 // Create world
 void create_world(const int n)
 {
-	// Two columns
+	// Two corridor passages
 	if (n == 0){
 
 		// Starting node
@@ -787,7 +796,7 @@ void create_world(const int n)
 		}
 	}
 
-	// Two corridors
+	// Two column obstacles
 	else if (n == 1){
 
 		w.start = new_node(3.0f, 3.0f, 5.0f, 0.0f, 0, 0, 0, 0.0f, 0.0f, NULL);
