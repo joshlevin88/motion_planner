@@ -4,7 +4,7 @@ std::queue<std::vector<float> > new_obs; // Unknown obstacles found via laser ra
 std::vector<std::vector<float> > found_obs; // Unknown obstacles found via laser range finder 
 
 // Allocate dynamic memory and initialize new node
-node* new_node(const float coord_x, const float coord_y, const float coord_z, const float hdg, const int tr_deg, const int zr, 
+node* new_node(const float coord_x, const float coord_y, const float coord_z, const float hdg, const int tr_deg, const int zr,
 	const int type, const float t, const float cost, node* const parent)
 {
 	node* new_node = (node*)malloc(sizeof(node));
@@ -100,7 +100,7 @@ node* extend_tree(node* root, node* const rand_node, node* const goal, const int
 	// Nearness criteria depends on whether feasible path has been found
 	int n;
 	if (!path_found) n = 0;
-	else n = 2;
+	else n = 0;
 
 	// Get vector of nodes orderered by nearness
 	near_vec = near(root, rand_node, n);
@@ -228,7 +228,7 @@ node* steer_an(node* const from, node* const towards)
 // Generate agile maneuver primitive 
 node* steer_agile(node* const from, const agile_man_t agile_man)
 {
-	float dx_end{0}, dy_end{0}, dz_end{0}, t_end{0};
+	float dx_end{ 0 }, dy_end{ 0 }, dz_end{ 0 }, t_end{ 0 };
 	int m_type = 0;
 
 	switch (agile_man) {
@@ -250,7 +250,8 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 		m_type = 4;
 		dx_end = 3.2277f;
 		dy_end = 0.0f;
-		dz_end = -0.1720f;
+		//dz_end = -0.1720f;
+		dz_end = 0.0f; //TEMP: for one plane flight
 		t_end = 1.3272f;
 		break;
 	default:
@@ -267,6 +268,12 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 	free(DCM);
 	DCM = NULL;
 
+	// If H2C (i.e. first primitive)
+	if (agile_man == H2C) {
+		node* H2C_end = new_node(from->coord[0] + dx_end, from->coord[1] + dy_end, from->coord[2] + dz_end, from->hdg, 0, 0, m_type, from->t + t_end, 0.0f, from);
+		return H2C_end;
+	}
+
 	// Root of primtive is time-delayed node
 	node* td = new_node(0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 1, from->t + t_td, 0.0f, from);
 	trim_end_states(td, from, from->tr_deg, from->zr, t_td);
@@ -275,7 +282,12 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 	// End node
 	node* end = new_node(td->coord[0] + dx_end, td->coord[1] + dy_end, td->coord[2] + dz_end, 0.0f, 0, 0, m_type, td->t + t_end, 0.0f, td);
 	end->cost = td->cost + 50.0f;
-	end->hdg = td->hdg + PI;
+	if (agile_man == ATA){
+		end->hdg = td->hdg + PI;
+	}
+	else {
+		end->hdg = td->hdg;
+	}
 
 	limit_angle(end->hdg); // Make sure heading lies between -PI and PI
 
@@ -287,13 +299,13 @@ node* steer_agile(node* const from, const agile_man_t agile_man)
 // Update tree in accordance with aircraft's real-time motion
 bool update_tree(node** root, node* const goal)
 {
-	static int count = 1;
+	//static int count = 1;
 	bool alg_end = false;
 	bool large_pos_err = false;
-	if(count % 3 == 0 && count <= 9){
-		printf("large pos error\n");
-		large_pos_err = true;
-	}
+	//if(count % 3 == 0 && count <= 9){
+	//	printf("large pos error\n");
+	//	large_pos_err = true;
+	//}
 	std::queue<node*> comm_q;
 
 	update_tree_for_new_obstacles(root);
@@ -301,7 +313,7 @@ bool update_tree(node** root, node* const goal)
 	// Get node nearest goal
 	int n;
 	if (!path_found) n = 0;
-	else n = 0;
+	else n = 1;
 	std::vector<list> nearest_vec = near(*root, goal, n);
 	node* end = nearest_vec[0].n;
 
@@ -333,15 +345,12 @@ bool update_tree(node** root, node* const goal)
 
 				// End with C2H
 				node* C2H_root = steer_agile(comm_end, C2H);
-				//add_to_commit_2(C2H_root);
 				comm_q.push(C2H_root);
-				//add_to_commit_2(C2H_root->child);
 				comm_q.push(C2H_root->child);
 				free_tree(&C2H_root);
 
 				alg_end = true;
 				break;
-				//return true;
 			}
 		}
 		else{
@@ -349,7 +358,6 @@ bool update_tree(node** root, node* const goal)
 			r2e_list.pop();
 		}
 
-		//add_to_commit_2(comm_end);
 		comm_q.push(comm_end);
 
 		if (comm_end->type == 2) printf("ATA at [%.1f, %.1f, %.1f]\n", (double)comm_end->coord[0], (double)comm_end->coord[1], (double)comm_end->coord[2]);
@@ -359,14 +367,14 @@ bool update_tree(node** root, node* const goal)
 
 	// Send commited nodes
 	// Re-planning if position tracking error is large
-	if(large_pos_err){
+	if (large_pos_err){
 		// Add commited nodes starting from aircraft's actual position
 		node* last = *root; // Note: should be node with actual position
-		last->coord[0] += 1;
-		last->coord[1] += 1;
-		last->coord[2] += 0;
+		//last->coord[0] += 1;
+		//last->coord[1] += 1;
+		//last->coord[2] += 0;
 		node* next;
-		while(!comm_q.empty()){
+		while (!comm_q.empty()){
 			next = comm_q.front();
 			trim_end_states(next, last, next->tr_deg, next->zr, (next->t - last->t));
 			add_to_commit_2(next);
@@ -385,15 +393,14 @@ bool update_tree(node** root, node* const goal)
 			add_to_commit_2(comm_q.front());
 			comm_q.pop();
 		}
-			// Prune tree
-			prune_tree(root, comm_end);
-			*root = comm_end;
-			(*root)->parent = NULL;
+		// Prune tree
+		prune_tree(root, comm_end);
+		*root = comm_end;
+		(*root)->parent = NULL;
 	}
-	
-	++count;
+
+	//++count;
 	return alg_end;
-	//return false;
 }
 
 // Displacement information for trajectory (length and cost)
@@ -477,12 +484,19 @@ bool collision(node* const root)
 // Check if node is outside of world
 bool out_of_world(node* const n)
 {
+	//TEMP: for one-plane motion
 	if (n->coord[0] < bf || n->coord[0] > (w.lims[0] - bf) ||
-		n->coord[1] < bf || n->coord[1] > (w.lims[1] - bf) ||
-		n->coord[2] < bf || n->coord[2] > (w.lims[2] - bf)){
+		n->coord[1] < bf || n->coord[1] > (w.lims[1] - bf)){
 		return true;
 	}
 
+	/*
+	if (n->coord[0] < bf || n->coord[0] > (w.lims[0] - bf) ||
+	n->coord[1] < bf || n->coord[1] > (w.lims[1] - bf) ||
+	n->coord[2] < bf || n->coord[2] > (w.lims[2] - bf)){
+	return true;
+	}
+	*/
 	return false;
 }
 
@@ -542,7 +556,7 @@ void free_tree_2(node** n, node* const root)
 	free_tree_2(&((*n)->child), root);
 	free_tree_2(&((*n)->next), root);
 
-	if(*n != root){
+	if (*n != root){
 		free(*n);
 		*n = NULL;
 	}
@@ -632,7 +646,7 @@ void add_to_near_vec(node* const n, node* const to, std::vector<list>* near_vec)
 		l.proximity = 0.0f;
 		l.nearness = 0.0f;
 		l.smart_nearness = 0.0f;
-	} 
+	}
 	else {
 		l.proximity = D2G;
 		l.nearness = disp_info(td, to).length;
@@ -669,27 +683,23 @@ std::stack<node*> root_to_end(node* const root, node* const end)
 void add_to_commit(const node* const n)
 {
 	/*
-	static int num = 0;
 
 	float rel_pos[3] = { n->coord[0] - start_coord[0],
-						 n->coord[1] - start_coord[1],
-						 n->coord[2] - start_coord[2] };
+	n->coord[1] - start_coord[1],
+	n->coord[2] - start_coord[2] };
 	rotate_arrvec(w.DCM, rel_pos);
 	float pos[3] = { rel_pos[0] + w.offset[0] + start_coord[0],
-				   	 rel_pos[1] + w.offset[1] + start_coord[1],
-					 rel_pos[2] + w.offset[2] + start_coord[2] };
+	rel_pos[1] + w.offset[1] + start_coord[1],
+	rel_pos[2] + w.offset[2] + start_coord[2] };
 	float hdg = n->hdg + w.offset[3];
 	limit_angle(hdg);
 
-	++num;
 	*/
 }
 
 // Add node to vector of committed nodes, converting from world frame to Stinger Dome
 void add_to_commit_2(const node* const n)
 {
-	static int num = 0;
-
 	float pos[3] {n->coord[0], -n->coord[1], n->coord[2]};
 
 	rotate_arrvec(w.DCM, pos);
@@ -697,11 +707,6 @@ void add_to_commit_2(const node* const n)
 	float hdg = -w.offset[3] - n->hdg;
 
 	limit_angle(hdg);
-
-	++num;
-
-	//printf("Commited pos: [%.1f, %.1f, %.1f], Commited hdg: %.1f\n", 
-		//pos[0], pos[1], pos[2], hdg*180.0f/PI);
 }
 
 // Create Direction Cosine Matrix
@@ -774,23 +779,23 @@ void create_world(const int n)
 
 		// Goals (intermediate and final)
 		w.n_goals = 9;
-		float goal_arr[9][5] = { { 45.0f, 8.5f, 5.0f, PI / 2.0f, 1.5f },
-		{ 30.0f, 13.0f, 5.0f, PI, 1.5f },
-		{ 20.0f, 13.0f, 5.0f, PI, 1.5f },
-		{ 10.0f, 13.0f, 5.0f, PI, 1.5f },
-		{ 5.0f, 16.5f, 5.0f, PI / 2.0f, 1.5f },
-		{ 10.0f, 21.0f, 5.0f, 0.0f, 1.5f },
-		{ 20.0f, 21.0f, 5.0f, 0.0f, 1.5f },
-		{ 30.0f, 21.0f, 5.0f, 0.0f, 1.5f },
-		{ 48.0f, 21.0f, 5.0f, 0.0f, 2.0f } };
+		float goal_arr[9][6] = { { 45.0f, 8.5f, 5.0f, PI / 2.0f, 1.5f, PI },
+		{ 30.0f, 13.0f, 5.0f, PI, 1.5f, PI },
+		{ 20.0f, 13.0f, 5.0f, PI, 1.5f, PI },
+		{ 10.0f, 13.0f, 5.0f, PI, 1.5f, PI },
+		{ 5.0f, 16.5f, 5.0f, PI / 2.0f, 1.5f, PI },
+		{ 10.0f, 21.0f, 5.0f, 0.0f, 1.5f, PI },
+		{ 20.0f, 21.0f, 5.0f, 0.0f, 1.5f, PI },
+		{ 30.0f, 21.0f, 5.0f, 0.0f, 1.5f, PI },
+		{ 48.0f, 21.0f, 5.0f, 0.0f, 2.0f, PI } };
 
 		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
 		for (int i = 0; i < w.n_goals; i++){
-			w.goals[i] = (float*)malloc(5 * sizeof(float*));
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
 		}
 
 		for (int i = 0; i < w.n_goals; i++){
-			for (int j = 0; j < 5; j++){
+			for (int j = 0; j < 6; j++){
 				w.goals[i][j] = goal_arr[i][j];
 			}
 		}
@@ -821,15 +826,15 @@ void create_world(const int n)
 		}
 
 		w.n_goals = 1;
-		float goal_arr[1][5] = { 48.0f, 23.0f, 5.0f, PI / 2.0f, 2.0f };
+		float goal_arr[1][6] = { 48.0f, 23.0f, 5.0f, PI / 2.0f, 2.0f, PI };
 
 		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
 		for (int i = 0; i < w.n_goals; i++){
-			w.goals[i] = (float*)malloc(5 * sizeof(float*));
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
 		}
 
 		for (int i = 0; i < w.n_goals; i++){
-			for (int j = 0; j < 5; j++){
+			for (int j = 0; j < 6; j++){
 				w.goals[i][j] = goal_arr[i][j];
 			}
 		}
@@ -860,16 +865,16 @@ void create_world(const int n)
 		}
 
 		w.n_goals = 2;
-		float goal_arr[2][5] = { { 25.0f, 12.5f, 5.0f, 0.0f, 1.0f },
-		{ 48.0f, 23.0f, 5.0f, 0.0f, 2.0f } };
+		float goal_arr[2][6] = { { 25.0f, 12.5f, 5.0f, 0.0f, 1.0f, PI },
+		{ 48.0f, 23.0f, 5.0f, 0.0f, 2.0f, PI } };
 
 		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
 		for (int i = 0; i < w.n_goals; i++){
-			w.goals[i] = (float*)malloc(5 * sizeof(float*));
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
 		}
 
 		for (int i = 0; i < w.n_goals; i++){
-			for (int j = 0; j < 5; j++){
+			for (int j = 0; j < 6; j++){
 				w.goals[i][j] = goal_arr[i][j];
 			}
 		}
@@ -900,17 +905,95 @@ void create_world(const int n)
 		}
 
 		w.n_goals = 3;
-		float goal_arr[3][5] = { { 17.5f, 22.5f, 5.0f, 0.0f, 2.5f },
-		{ 32.5f, 2.5f, 5.0f, 0.0f, 2.5f },
-		{ 48.0f, 23.0f, 5.0f, 0.0f, 2.0f } };
+		float goal_arr[3][6] = { { 17.5f, 22.5f, 5.0f, 0.0f, 2.5f, PI },
+		{ 32.5f, 2.5f, 5.0f, 0.0f, 2.5f, PI },
+		{ 48.0f, 23.0f, 5.0f, 0.0f, 2.0f, PI } };
 
 		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
 		for (int i = 0; i < w.n_goals; i++){
-			w.goals[i] = (float*)malloc(5 * sizeof(float*));
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
 		}
 
 		for (int i = 0; i < w.n_goals; i++){
-			for (int j = 0; j < 5; j++){
+			for (int j = 0; j < 6; j++){
+				w.goals[i][j] = goal_arr[i][j];
+			}
+		}
+	}
+
+	// S walls in Dome
+	else if (n == 4) {
+
+		w.start = new_node(7.0f, 15.0f, 5.0f, 0.0f, 0, 0, 0, 0.0f, 0.0f, NULL);
+
+		w.lims[0] = 60.0f;
+		w.lims[1] = 30.0f;
+		w.lims[2] = 10.0f;
+
+		w.n_obs = 2;
+		float obs_arr[2][6] = { { 22.0f, 15.0f, 0.0f, 2.0f, 15.0f, 10.0f },
+		{ 38.0f, 0.0f, 0.0f, 2.0f, 15.0f, 10.0f } };
+
+		w.obs = (float**)malloc(w.n_obs * sizeof(float**));
+		for (int i = 0; i < w.n_obs; i++){
+			w.obs[i] = (float*)malloc(6 * sizeof(float*));
+		}
+
+		for (int i = 0; i < w.n_obs; ++i){
+			for (int j = 0; j < 6; ++j){
+				w.obs[i][j] = obs_arr[i][j];
+			}
+		}
+
+		w.n_goals = 1;
+		float goal_arr[1][6] = { 50.0f, 10.0f, 5.0f, 0.0f, 2.5f, PI };
+
+		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
+		for (int i = 0; i < w.n_goals; i++){
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
+		}
+
+		for (int i = 0; i < w.n_goals; i++){
+			for (int j = 0; j < 6; j++){
+				w.goals[i][j] = goal_arr[i][j];
+			}
+		}
+	}
+
+	// U in Dome
+	else if (n == 5) {
+
+		w.start = new_node(5.0f, 15.0f, 5.0f, 0.0f, 0, 0, 0, 0.0f, 0.0f, NULL);
+
+		w.lims[0] = 60.0f;
+		w.lims[1] = 30.0f;
+		w.lims[2] = 10.0f;
+
+		w.n_obs = 1;
+		float obs_arr[1][6] = { 0.0f, 15.0f, 0.0f, 30.0f, 1.0f, 10.0f };
+
+		w.obs = (float**)malloc(w.n_obs * sizeof(float**));
+		for (int i = 0; i < w.n_obs; i++){
+			w.obs[i] = (float*)malloc(6 * sizeof(float*));
+		}
+
+		for (int i = 0; i < w.n_obs; ++i){
+			for (int j = 0; j < 6; ++j){
+				w.obs[i][j] = obs_arr[i][j];
+			}
+		}
+
+		w.n_goals = 2;
+		float goal_arr[2][6] = { { 40.0f, 14.0f, 5.0f, 0.0f, 2.5f, PI },
+		{ 7.0f, 21.0f, 5.0f, PI, 2.5f, 20.0f*PI / 180.0f } };
+
+		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
+		for (int i = 0; i < w.n_goals; i++){
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
+		}
+
+		for (int i = 0; i < w.n_goals; i++){
+			for (int j = 0; j < 6; j++){
 				w.goals[i][j] = goal_arr[i][j];
 			}
 		}
@@ -919,24 +1002,24 @@ void create_world(const int n)
 	// No obstacles
 	else {
 
-		w.start = new_node(3.0f, 3.0f, 5.0f, PI / 4, 0, 0, 0, 0.0f, 0.0f, NULL);
+		w.start = new_node(5.0f, 15.0f, 5.0f, 0.0f, 0, 0, 0, 0.0f, 0.0f, NULL);
 
-		w.lims[0] = 50.0f;
-		w.lims[1] = 25.0f;
+		w.lims[0] = 60.0f;
+		w.lims[1] = 30.0f;
 		w.lims[2] = 10.0f;
 
 		w.n_obs = 0;
 
 		w.n_goals = 1;
-		float goal_arr[1][5] = { 48.0f, 23.0f, 5.0f, PI / 2.0f, 2.5f };
+		float goal_arr[1][6] = { 45.0f, 15.0f, 5.0f, 0.0f, 2.5f, 30.0f*PI / 180.0f };
 
 		w.goals = (float**)malloc(w.n_goals * sizeof(float**));
 		for (int i = 0; i < w.n_goals; i++){
-			w.goals[i] = (float*)malloc(5 * sizeof(float*));
+			w.goals[i] = (float*)malloc(6 * sizeof(float*));
 		}
 
 		for (int i = 0; i < w.n_goals; i++){
-			for (int j = 0; j < 5; j++){
+			for (int j = 0; j < 6; j++){
 				w.goals[i][j] = goal_arr[i][j];
 			}
 		}
@@ -947,8 +1030,8 @@ void create_world(const int n)
 bool goal_reached(node* const n, node* const goal, const int gn)
 {
 	if (n == NULL) return false;
-	if (norm(n, goal) <= w.goals[gn][4]) { // If in region
-		//n->cost = (float)gn * (-1000.0f);
+	float d_hdg = n->hdg - w.goals[gn][3];
+	if (norm(n, goal) <= w.goals[gn][4] && fabsf(limit_angle(d_hdg)) <= w.goals[gn][5]) { // If in region
 		return true;
 	}
 	if (goal_reached(n->next, goal, gn)) return true; // Recursively iterate
@@ -966,11 +1049,13 @@ void rotate_arrvec(ptr_to_DCM DCM, float arr_vec[])
 }
 
 // Limit angle to -PI to PI range
-void limit_angle(float &angle)
+float limit_angle(float &angle)
 {
 	angle = fmod(angle, 2 * PI);
 	if (angle > PI) angle = -2 * PI + angle;
 	else if (angle < -PI) angle = 2 * PI + angle;
+
+	return angle;
 }
 
 // Get heading from euler array when aircraft is in hover
@@ -1015,9 +1100,9 @@ bool intersection(const float p0_x, const float p0_y, const float p1_x, const fl
 	float p3_y_bf = p2_y + (p3_y - p2_y) + bf * (p3_y - p2_y) / d;
 
 	float s1_x, s1_y, s2_x, s2_y;
-	s1_x = p1_x - p0_x;     
+	s1_x = p1_x - p0_x;
 	s1_y = p1_y - p0_y;
-	s2_x = p3_x_bf - p2_x_bf;     
+	s2_x = p3_x_bf - p2_x_bf;
 	s2_y = p3_y_bf - p2_y_bf;
 
 	float den = (-s2_x * s1_y + s1_x * s2_y);
@@ -1060,7 +1145,7 @@ void prune_new_obs_collisions(node** n, node** root, const float d)
 
 	// Do not keep searching node and children if it is further from root than furthest obstacle corner
 	float dn = norm((*root)->coord[0], (*root)->coord[1], (*n)->coord[0], (*n)->coord[1]);
-	bool past_obs = (dn > d) ? true : false; 
+	bool past_obs = (dn > d) ? true : false;
 
 	if (!past_obs && (*n)->child != NULL){
 		if (intersection((*n)->coord[0], (*n)->coord[1], (*n)->child->coord[0], (*n)->child->coord[1],
@@ -1097,9 +1182,6 @@ node* initialize_world(const int nw, const float p_init[3], const float hdg_init
 	//trim_end_states(second, root, 0, 0, 0.5f);
 	add_child(root, second);
 
-	add_to_commit_2(root);
-	add_to_commit_2(second);
-
 	return root;
 }
 
@@ -1114,28 +1196,32 @@ node* initialize_world_2(const int nw, const float p_init[3], const float hdg_in
 	rotate_arrvec(DCM_init, temp);
 	free(DCM_init);
 
-	w.start->coord[0] = temp[0]; 
-	w.start->coord[1] = -temp[1]; 
+	w.start->coord[0] = temp[0];
+	w.start->coord[1] = -temp[1];
 	w.start->coord[2] = temp[2];
 	w.start->hdg = hdg_del_dome - hdg_init;
 	w.offset[3] = -hdg_del_dome;
 	w.DCM = create_DCM(0.0f, 0.0f, w.offset[3]);
 
 	start_coord[0] = w.start->coord[0];
-	start_coord[1] = w.start->coord[1]; 
+	start_coord[1] = w.start->coord[1];
 	start_coord[2] = w.start->coord[2];
 
+	//TEMP: for one-plane motion, make z-coordinate of all goals equal to initial z-coordinate
+	for (int i = 0; i < w.n_goals; ++i){
+		w.goals[i][2] = start_coord[2];
+	}
+
 	// Initialize tree with two nodes
-	node* root = w.start;
-	node* second = steer_agile(root, H2C); // start with H2C
+	node* init = w.start;
+	node* second = steer_agile(init, H2C); // start with H2C
 	//node* second = new_node(0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 1.0f, 0.0f, NULL);
 	//trim_end_states(second, root, 0, 0, 0.5f);
-	add_child(root, second);
 
-	add_to_commit_2(root);
+	add_to_commit_2(init);
 	add_to_commit_2(second);
 
-	return root;
+	return second;
 }
 
 // Garbage cleanup for tree and world dynamic memory

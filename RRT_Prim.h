@@ -12,8 +12,8 @@
 #define PI 3.1415f
 
 const float V = 5.0f; // Flight velocity
-const float bf = 2.0f; // Buffer around obstacles
-const int max_tr_deg = 110; // Max turning rate
+const float bf = 4.0f; // Buffer around obstacles
+const int max_tr_deg = 80; // Max turning rate
 const int max_zr = 0; // Max climb rate
 const float coll_dist = 0.2f; // Gap between collision checks
 const float ATA_dist = 5.0f; // Distance required to do ATA
@@ -23,7 +23,7 @@ const float t_int = 0.5f; // Planning horizon interval
 const float ts = 0.5f; // Maximum time between nodes
 const float ts_max = 1.0f; // Maximum time for a primitive
 const int near_max = 10; // Maximum number of next near attempts
-const int bias_freq = 30; // Frequency of selecting goal as "random" node
+const int bias_freq = 50; // Frequency of selecting goal as "random" node
 const float hdg_del_dome = 2.32f; // Heading of x-axis of Stinger Dome relative to NED frame
 
 node* new_node(const float, const float, const float, const float, const int, 
@@ -60,7 +60,7 @@ float norm(const float, const float, const float, const float, const float, cons
 void create_world(const int);
 bool goal_reached(node* const, node* const, const int);
 void rotate_arrvec(ptr_to_DCM, float[]);
-void limit_angle(float &); 
+float limit_angle(float &); 
 float hover_hdg(const float, const float, const float);
 bool intersection(const float, const float, const float, const float, const float, const float, const float, const float);
 void update_tree_for_new_obstacles(node**);
